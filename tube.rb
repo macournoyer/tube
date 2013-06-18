@@ -36,6 +36,10 @@ class Tube
       # puts @parser.headers
       # @socket.close
 
+      puts "#{@parser.http_method} #{@parser.request_path}"
+      puts "  " + @parser.headers.inspect
+      puts
+
       env = {}
       @parser.headers.each_pair do |name, value|
         name = "HTTP_" + name.upcase.tr('-', '_') # User-Agent => HTTP_USER_AGENT
@@ -98,5 +102,5 @@ builder.instance_eval config
 
 server = Tube.new
 server.app = builder.app
-puts "Plugging tube to port 3000"
+puts "Plugging the tube to port 3000"
 server.start 3000
