@@ -1,5 +1,7 @@
 class App
   def call(env)
+    sleep 5 if env["PATH_INFO"] == "/sleep"
+
     message = "Hello from the tube.\n"
     [
       200,

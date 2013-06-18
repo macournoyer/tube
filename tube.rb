@@ -1,5 +1,7 @@
 require "socket"
 require "http/parser"
+require "stringio"
+require "thread"
 
 class Tube
   attr_accessor :app
@@ -9,15 +11,18 @@ class Tube
 
     loop do
       socket = server.accept
-      connection = Connection.new(socket, app)
-
-      until socket.closed?
-        data = socket.readpartial(1024)
-        # puts data
-        connection << data
-      end
-      # puts "done"
+      # data = socket.readpartial(1024)
+      # puts data
       # socket.close
+
+      Thread.new do
+        connection = Connection.new(socket, app)
+
+        until socket.closed?
+          data = socket.readpartial(1024)
+          connection << data
+        end
+      end
     end
   end
 
@@ -70,7 +75,7 @@ class Tube
       body.each do |chunk|
         @socket.write chunk
       end
-      body.close
+      body.close if body.respond_to? :close
 
       @socket.close
     end
