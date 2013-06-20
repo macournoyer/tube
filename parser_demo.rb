@@ -10,7 +10,7 @@ class ParserDemo
     puts "Path: " + @parser.request_path
   end
 
-  def send_fake_request
+  def parse
     @parser << "GET / HTTP/1.1\r\n"
     @parser << "Host: localhost:3000\r\n"
     @parser << "Accept: */*\r\n"
@@ -18,4 +18,4 @@ class ParserDemo
   end
 end
 
-ParserDemo.new.send_fake_request
+ParserDemo.new.parse
