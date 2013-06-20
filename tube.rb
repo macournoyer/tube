@@ -4,21 +4,19 @@ require "stringio"
 require "thread"
 
 class Tube
-  attr_accessor :app
+  def initialize(app)
+    @app = app
+  end
 
   def start(port)
     server = TCPServer.new(port)
 
     loop do
       socket = server.accept
-      # data = socket.readpartial(1024)
-      # puts data
-      # socket.close
-
       Thread.new do
-        connection = Connection.new(socket, app)
+        connection = Connection.new(socket, @app)
 
-        until socket.closed?
+        until socket.closed? || socket.eof?
           data = socket.readpartial(1024)
           connection << data
         end
@@ -30,24 +28,22 @@ class Tube
     def initialize(socket, app)
       @socket = socket
       @app = app
-      @parser = Http::Parser.new(self)
+      @parser = HTTP::Parser.new(self)
     end
 
-    def <<(chunk)
-      @parser << chunk
+    def <<(data)
+      @parser << data
     end
 
     def on_message_complete
-      # puts @parser.headers
-      # @socket.close
-
       puts "#{@parser.http_method} #{@parser.request_path}"
       puts "  " + @parser.headers.inspect
       puts
 
       env = {}
       @parser.headers.each_pair do |name, value|
-        name = "HTTP_" + name.upcase.tr('-', '_') # User-Agent => HTTP_USER_AGENT
+        # User-Agent => HTTP_USER_AGENT
+        name = "HTTP_" + name.upcase.tr('-', '_')
         env[name] = value
       end
       env["PATH_INFO"] = @parser.request_path
@@ -60,7 +56,7 @@ class Tube
 
     REASONS = {
       200 => "OK",
-      404 => "Not Found"
+      404 => "Not found"
     }
 
     def process(env)
@@ -69,7 +65,7 @@ class Tube
 
       @socket.write "HTTP/1.1 #{status} #{reason}\r\n"
       headers.each_pair do |name, value|
-        @socket.write "#{name}: #{value}\r\n"
+        @socket.write "#{name}: #{value}\r\n"        
       end
       @socket.write "\r\n"
       body.each do |chunk|
@@ -87,25 +83,17 @@ class Tube
     def run(app)
       @app = app
     end
+
+    def self.parse_file(file)
+      config = File.read(file)
+      builder = new
+      builder.instance_eval(config)
+      builder.app
+    end
   end
 end
 
-# class App
-#   def call(env)
-#     message = "Hello from the tube.\n"
-#     [
-#       200,
-#       { 'Content-Type' => 'text/plain', 'Content-Length' => message.size.to_s },
-#       [message]
-#     ]
-#   end
-# end
-
-config = File.read("config.ru")
-builder = Tube::Builder.new
-builder.instance_eval config
-
-server = Tube.new
-server.app = builder.app
+app = Tube::Builder.parse_file("config.ru")
+server = Tube.new(app)
 puts "Plugging the tube to port 3000"
 server.start 3000
