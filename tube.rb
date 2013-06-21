@@ -30,6 +30,14 @@ class Tube
     end
   end
 
+  def start_em
+    EM.run do
+      EM.start_server "localhost", 3000, EMConnection do |connection|
+        connection.app = @app
+      end
+    end
+  end
+
   class Connection
     def initialize(socket, app)
       @socket = socket
@@ -89,6 +97,58 @@ class Tube
     end
   end
 
+  class EMConnection < EM::Connection
+    attr_accessor :app
+
+    def post_init
+      @parser = Http::Parser.new(self)
+    end
+
+    def receive_data(data)
+      @parser << data
+    end
+
+    def on_message_complete
+      puts "#{@parser.http_method} #{@parser.request_path}"
+      puts "  " + @parser.headers.inspect
+      puts
+
+      env = {}
+      @parser.headers.each_pair do |name, value|
+        # User-Agent => HTTP_USER_AGENT
+        name = "HTTP_" + name.upcase.tr("-", "_")
+        env[name] = value
+      end
+      env["PATH_INFO"] = @parser.request_path
+      env["REQUEST_METHOD"] = @parser.http_method
+      env["rack.input"] = StringIO.new
+
+      send_response env
+    end
+
+    REASONS = {
+      200 => "OK",
+      404 => "Not found"
+    }
+
+    def send_response(env)
+      status, headers, body = @app.call(env)
+      reason = REASONS[status]
+
+      send_data "HTTP/1.1 #{status} #{reason}\r\n"
+      headers.each_pair do |name, value|
+        send_data "#{name}: #{value}\r\n"
+      end
+      send_data "\r\n"
+      body.each do |chunk|
+        send_data chunk
+      end
+      body.close if body.respond_to? :close
+
+      close_connection_after_writing
+    end
+  end
+
   class Builder
     attr_reader :app
 
@@ -111,4 +171,5 @@ app = Tube::Builder.parse_file("config.ru")
 server = Tube.new(3000, app)
 puts "Plugging tube into port 3000"
 # server.start
-server.prefork 3
+# server.prefork 3
+server.start_em
